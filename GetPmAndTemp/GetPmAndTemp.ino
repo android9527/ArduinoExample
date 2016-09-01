@@ -16,7 +16,7 @@ EthernetClient client;
 
 dht11 DHT11;
  
-#define DHT11PIN 2
+#define DHT11PIN 4
 
 int measurePin = 0; //Connect dust sensor to Arduino A0 pin
 int ledPower = 2;   //Connect 3 led driver pins of dust sensor to Arduino D2
@@ -39,26 +39,29 @@ LiquidCrystal_I2C lcd(0x27, 16, 2); // set the LCD address to 0x27 for a 16 char
 
 void setup() {
   Serial.begin(9600);
-  setupPm();
-  setupTempAndHumidity();
+  //setupPm();
+  //setupTempAndHumidity();
 
   if (Ethernet.begin(mac) == 0) {
     Serial.println("Failed to configure Ethernet using DHCP"); 
+  } else{
+    Serial.println(Ethernet.localIP());
   }
   
 }
 
 void loop() {
-  getPmData();
-  delay (5000);
+  //getPmData();
+  //delay (5000);
 
   // start get temperature and humidity
-  getTempAndHumidityData();
-
+  //getTempAndHumidityData();
+  String data = "user_id=1&pm_value=" + (String)voMeasuredReal + "&temperature=" + (String)temperature + "&humidity=" + (String)humidity + "&other=";
+  Serial.println(data);
   // start post data
   postData();
   
-  delay (5000);
+  delay (10000);
 }
 
 /**
@@ -68,8 +71,8 @@ void setupPm() {
   pinMode(ledPower, OUTPUT);
   lcd.init();
   // initialize the lcd
-  lcd.noBacklight();
-  //lcd.backlight();
+  // lcd.noBacklight();
+  lcd.backlight();
   lcd.home();
 }
 
@@ -114,7 +117,7 @@ void getPmData() {
   if (dustDensity > 600) dustDensity = 600.0;
 
   lcd.clear();
-  String result = (String)voMeasuredReal + "  ug/m3";
+  String result = (String)dustDensity + "  ug/m3";
   lcd.print(result);
   lcd.setCursor(0, 1);
 
@@ -122,7 +125,7 @@ void getPmData() {
   //lcd.print(voMeasuredReal);
 
   lcd.print("PM2.5 ");
-  lcd.print(dustDensity);
+  lcd.print(voMeasuredReal);
   //lcd.print(" ");
   //lcd.print(voMeasuredReal);
   Serial.println("dustDensity = " + char(dustDensity));
@@ -211,26 +214,61 @@ void getTempAndHumidityData() {
   
   lcd.clear();
   
-  lcd.print((String)humidity + " %");
+  lcd.print("Humi " + (String)humidity + "%");
   lcd.setCursor(0, 1);
 
-  lcd.print((String)temperature + " oC");
+  lcd.print("Temp " + (String)temperature + "oC");
 }
 
 void postData() {
 
-  String data = "user_id=1&pm_value=" + (String)dustDensity + "&temperature=" + (String)temperature + "&humidity=" + (String)humidity + "&other=";
-  Serial.print(data);
+  // String data = "user_id=1&pm_value=" + (String)voMeasuredReal + "&temperature=" + (String)temperature + "&humidity=" + (String)humidity + "&other=";
+   String data = "username=18500";
+  Serial.println(data);
 
-  if (client.connect("www.*****.com",8080)) { // REPLACE WITH YOUR SERVER ADDRESS
-    client.println("POST /add.php HTTP/1.1"); 
-    client.println("Host: *****.com"); // SERVER ADDRESS HERE TOO
+  char* host = "192.168.1.247";
+  if (client.connect(host,8080)) { // REPLACE WITH YOUR SERVER ADDRESS
+    client.println("POST /servlet/PostPmServlet HTTP/1.1"); 
+    client.println("Host: " + (String)host); // SERVER ADDRESS HERE TOO
     client.println("Content-Type: application/x-www-form-urlencoded"); 
     client.print("Content-Length: "); 
     client.println(data.length()); 
     client.println(); 
-    client.print(data); 
-  } 
+    client.print(data);
+
+// connectLoop controls the hardware fail timeout
+  int connectLoop = 0;
+  int inChar;
+  while(client.connected())
+  {
+    while(client.available())
+    {
+      inChar = client.read();
+      Serial.write(inChar);
+      // set connectLoop to zero if a packet arrives
+      connectLoop = 0;
+    }
+
+    break;
+    connectLoop++;
+
+    // if more than 10000 milliseconds since the last packet
+    if(connectLoop > 10000)
+    {
+      // then close the connection from this end.
+      Serial.println();
+      Serial.println(F("Timeout"));
+      client.stop();
+    }
+    // this is a delay for the connectLoop timing
+    delay(1);
+  }
+
+     
+  }else
+  {
+     Serial.println("connect failed");
+  }
 
   if (client.connected()) { 
     client.stop();  // DISCONNECT FROM THE SERVER
